@@ -1,0 +1,7 @@
+# dsh-reply-usage bundle patch
+#
+# Mount the host half (an empty apply — this surface plugin's browser half
+# ships via dsh.client) so the plugin appears in the host loader stack.
+- insert:
+    - id: reply-usage
+      name: 'dsh-reply-usage'
