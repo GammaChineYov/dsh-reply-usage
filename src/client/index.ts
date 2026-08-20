@@ -40,9 +40,9 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-reply-usage: dictionaries')
   ctx.conversationEvents.register(replyUsageDefinition)
   ctx.slots.inject(
-    'conversation.chat.messageMeta',
+    'conversation.chat.turnTail',
     () => ctx.slots.register({
-      name: 'conversation.chat.messageMeta',
+      name: 'conversation.chat.turnTail',
       select: selectReplyUsage,
       locale: NS,
     }, ReplyUsage),
