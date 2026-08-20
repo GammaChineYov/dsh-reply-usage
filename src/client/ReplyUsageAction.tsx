@@ -53,16 +53,12 @@ function formatTokens(n: number): string {
 }
 
 const chipStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '0 6px',
-  borderRadius: 8,
-  background: 'transparent',
-  color: 'var(--dsw-alias-label-secondary, #999)',
-  font: 'inherit',
-  fontSize: 12,
-  lineHeight: 1.7,
+  // Mirrors the assistant clock label (MessageIconActions .timeEnd): small
+  // tertiary text reading as a continuation of "15:15 · 用时 … · 119 tok/s".
+  paddingLeft: 12,
+  fontSize: 14,
+  lineHeight: 24,
+  color: 'var(--dsw-alias-label-tertiary)',
   whiteSpace: 'nowrap',
 }
 
