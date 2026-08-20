@@ -1,7 +1,7 @@
 {
   "name": "dsh-reply-usage",
-  "version": "0.1.3",
-  "description": "DSH web client plugin: appends per-reply token usage and cumulative context-window % to the reply footer area (conversation.chat.turnTail chain).",
+  "version": "0.1.4",
+  "description": "DSH web client plugin: appends a per-reply token-usage badge (＋ added tokens · cache-hit %) to the assistant reply action row via the conversation.chat.assistant-actions slot, synced with official rc.8.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
