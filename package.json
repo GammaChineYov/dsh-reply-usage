@@ -1,6 +1,6 @@
 {
   "name": "dsh-reply-usage",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "DSH web client plugin: appends per-reply token usage and cumulative context-window % to the reply footer area (conversation.chat.turnTail chain).",
   "type": "module",
   "main": "lib/index.js",
