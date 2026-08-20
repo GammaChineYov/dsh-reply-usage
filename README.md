@@ -10,16 +10,18 @@ Synced with the official **deepseek-harness rc.8** client contract.
 
 ## What each stat means
 
-- **＋ [number]** — tokens this reply actually added to the conversation context: uncached input + cache writes + generated output of the turn's final model request. Cached reads (already-present history) are excluded, so this is real growth, not total prompt size.
+- **＋ [number]** — tokens this reply actually added to the conversation context: uncached input + cache writes + generated output summed across the turn's model steps. Cached reads (already-present history) are excluded, so this is real growth, not total prompt size.
 - **缓存 [n%]** — cache-hit share of this turn's billed input.
 
 The badge lives inside the assistant message's action row (`conversation.chat.assistant-actions`, the additive list slot shared with feedback and `memory-footer`), styled as a continuation of the official clock label (14px tertiary text). Hovering shows the full definition.
 
-## How it works (rc.8)
+## How it works
 
-- **Host half** (`lib/index.js`) — listens to `session/event`, folds every provider-reported usage sample of one turn (each model step is a separate request; a step's provisional `assistant/chunk` usage is replaced by its final `assistant/message` sample so streaming re-reports never double count), and serves the fold over `GET /reply-usage/by-message?sessionId=..&messageId=..`.
-- **Client half** (`lib/client.js`) — registers a `conversation.chat.assistant-actions` entry (`id: reply-usage`, `order: 15`); for the closing message of a turn it fetches the host route and renders the compact badge. Hidden while the fetch is pending or the turn reported nothing usable.
+- **Client half** (`lib/client.js`) — registers a state-only `conversationEvents` Definition (`kind: replyUsage`) that folds every provider-reported usage sample of one turn (each model step is a separate request; a step's provisional `assistant/chunk` usage is replaced by its final `assistant/message` sample so streaming re-reports never double count) and publishes the summed volume as turn-scoped data (`ConversationTurnDataMap.replyUsage`). The badge entry (`conversation.chat.assistant-actions`, `id: reply-usage`, `order: 15`) reads the fold off the closing message's turn from the conversation snapshot and renders the compact badge. Hidden while the turn reported nothing usable.
+- **Host half** (`lib/index.js`) — empty apply; the plugin is a pure client surface.
 
+> Why fold client-side instead of host-side? The conversation engine replays the full session log when a session opens, so client-side folds are **complete and stable across host restarts and plugin reloads**. A host-side in-memory fold only witnesses live `session/event` publications (constructor seeds / replayed history do not emit), so any restart or reload mid-turn permanently lost the pre-load steps and collapsed the badge to the last request's volume — that regression is why the fold lives in the browser.
+>
 > Why not `conversation.chat.turnTail` / `messageMeta`? Both were the original targets, but neither is usable on rc.8: `messageMeta` was removed from the published `@deepseek-ai/dsh-client-ui-conversation`, and the `turnTail` chain is a single-winner election (first `select` hit wins) claimed by the official produced-files entry. `assistant-actions` is additive, so per-reply metadata must ride it instead.
 
 ## Install

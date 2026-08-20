@@ -2,46 +2,29 @@
  * ReplyUsageAction: the per-message badge rendered inside the assistant
  * message's IconActions row (`conversation.chat.assistant-actions`, an
  * additive list slot so it coexists with the feedback and memory-footer
- * entries). For the closing message of a turn it fetches the turn's folded
- * token usage from the host route and shows the tokens this reply added to
- * the context plus the turn's cache-hit share. Hidden entirely while the
- * fetch is pending or the turn reported nothing usable.
+ * entries). For the closing message of a turn it reads the turn's folded
+ * token usage straight from the conversation snapshot (client-side fold, see
+ * reply-usage-node.ts) and shows the tokens this reply added to the context
+ * plus the turn's cache-hit share. Hidden entirely while the closing turn
+ * reported nothing usable.
  */
-import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
+import type { CSSProperties, ReactElement, ReactNode } from 'react'
+import type { ConversationSnapshot, UseConversationSession } from '@deepseek-ai/dsh-client-runtime/client'
+// Type-only: the `assistant-step` StepDataMap key merge published by ui-conversation.
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { NS } from './locales.ts'
-
-/** One turn's billed token volume, cache buckets kept apart for the hit %. */
-interface UsageRecord {
-  readonly inputTokens: number
-  readonly outputTokens: number
-  readonly cacheReadTokens: number
-  readonly cacheWriteTokens: number
-}
-
-/** JSON body served by the host `/reply-usage/by-message` route. */
-interface ReplyUsageBody {
-  readonly usage: UsageRecord
-  readonly promptBilledInput: number
-  readonly finalOutput: number
-}
-
-export interface ReplyUsageActionProps extends PropsLocale<typeof NS> {
-  /** Durable identity of the finalized assistant message (slot owner). */
-  messageId?: string
-  /** Current session id (list-slot standard seat). */
-  sessionId?: string
-}
+import type { ReplyUsageTurnData } from './reply-usage-node.ts'
 
 /** Billed input of one usage record: uncached input plus cache traffic. */
-function billedInput(usage: UsageRecord): number {
+function billedInput(usage: ReplyUsageTurnData['usage']): number {
   return usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
 }
 
 /** Tokens this turn actually added to the conversation context: uncached
  * input and cache writes (new prompt material entering the context) plus
  * generated output. Cached reads are already-present content, not growth. */
-function addedContext(usage: UsageRecord): number {
+function addedContext(usage: ReplyUsageTurnData['usage']): number {
   return usage.inputTokens + usage.cacheWriteTokens + usage.outputTokens
 }
 
@@ -52,7 +35,34 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
-const chipStyle: React.CSSProperties = {
+/**
+ * Resolve the closing message's turn and read its folded usage from the
+ * conversation snapshot. Scoped to the exact assistant message the badge is
+ * rendered for: scans each turn's steps for the assistant step whose durable
+ * final node carries this messageId, then returns that turn's `replyUsage`.
+ * The turn data is published by the replyUsage Definition, which folds the
+ * FULL session log (including replayed history), so the value is complete
+ * and stable across host restarts and plugin reloads.
+ */
+function turnUsageOf(snapshot: ConversationSnapshot, messageId: string): ReplyUsageTurnData | undefined {
+  for (const turn of snapshot.chat.timeline.turns.values()) {
+    for (const step of turn.steps) {
+      const assistant = step.data.get('assistant-step')
+      if (assistant?.finalNode?.messageId !== messageId) continue
+      return turn.data.get('replyUsage')
+    }
+  }
+  return undefined
+}
+
+export interface ReplyUsageActionProps extends PropsLocale<typeof NS> {
+  /** Durable identity of the finalized assistant message (slot owner). */
+  messageId?: string
+  /** Session-scope standard seat: conversation snapshot selector. */
+  useSession: UseConversationSession
+}
+
+const chipStyle: CSSProperties = {
   // Mirrors the assistant clock label (MessageIconActions .timeEnd): small
   // tertiary text reading as a continuation of "15:15 · 用时 … · 119 tok/s".
   paddingLeft: 12,
@@ -64,41 +74,17 @@ const chipStyle: React.CSSProperties = {
 
 /**
  * The per-reply usage badge.
- * @param props - the owner's message identity, the session seat, and locale.
+ * @param props - the owner's message identity, the snapshot seat, and locale.
  * @returns the token segment, or null while nothing usable is known.
  */
-export function ReplyUsageAction({ messageId, sessionId, t }: ReplyUsageActionProps): ReactElement | null {
-  const [body, setBody] = useState<ReplyUsageBody | null>(null)
-  const [done, setDone] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    setBody(null)
-    setDone(false)
-    if (messageId === undefined || sessionId === undefined) {
-      setDone(true)
-      return
-    }
-    const url = `/reply-usage/by-message?sessionId=${encodeURIComponent(sessionId)}&messageId=${encodeURIComponent(messageId)}`
-    fetch(url)
-      .then((response) => response.json())
-      .then((data: unknown) => {
-        if (cancelled) return
-        setBody(data as ReplyUsageBody | null)
-        setDone(true)
-      })
-      .catch(() => {
-        if (!cancelled) setDone(true)
-      })
-    return () => { cancelled = true }
-  }, [messageId, sessionId])
-
-  if (!done || body === null) return null
-  const usage = body.usage
-  const billed = billedInput(usage)
-  const added = addedContext(usage)
+export function ReplyUsageAction({ messageId, useSession, t }: ReplyUsageActionProps): ReactElement | null {
+  const usage = useSession(snapshot =>
+    messageId === undefined ? undefined : turnUsageOf(snapshot, messageId))
+  if (usage === undefined) return null
+  const billed = billedInput(usage.usage)
+  const added = addedContext(usage.usage)
   if (added === 0) return null
-  const hit = billed > 0 ? Math.round((usage.cacheReadTokens / billed) * 100) : null
+  const hit = billed > 0 ? Math.round((usage.usage.cacheReadTokens / billed) * 100) : null
   const parts: ReactNode[] = [
     <span key="added">{`＋ ${formatTokens(added)}`}</span>,
   ]
